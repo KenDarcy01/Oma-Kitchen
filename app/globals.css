@@ -118,6 +118,8 @@ textarea { min-height: 220px; resize: vertical; line-height: 1.55; }
 .icon-btn { border: 0; background: none; color: var(--muted); font-size: 20px; cursor: pointer; width: 34px; height: 34px; border-radius: 8px; }
 .icon-btn:hover { background: var(--sand); }
 .questions { background: #fff6d8; border-radius: 14px; padding: 12px 16px; display: grid; gap: 4px; }
+.dish-found { display: grid; grid-template-columns: 120px 1fr; gap: 14px; background: var(--sand); border-radius: 14px; padding: 10px; }
+.dish-found img { width: 120px; height: 120px; object-fit: cover; border-radius: 10px; }
 .spinner { width: 18px; height: 18px; border-radius: 50%; border: 3px solid #fff6; border-top-color: #fff; animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
