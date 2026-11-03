@@ -1,8 +1,9 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BACKDROPS, drawBackdrop, type BackdropId } from "@/components/backdrops";
+import { getRecipe, setRecipePhoto, uploadImage } from "@/lib/data";
 
 type Shape = "landscape" | "square";
 type Source = { kind: "backdrop"; id: BackdropId } | { kind: "custom"; img: ImageBitmap } | { kind: "original" };
@@ -180,16 +181,15 @@ export function PhotoStudio({ slug, title }: { slug: string; title: string }) {
       setError("Couldn't make the photo. Try again?");
       return;
     }
-    const fd = new FormData();
-    fd.set("photo", new File([blob], `${slug}.jpg`, { type: "image/jpeg" }));
-    const res = await fetch(`/api/recipes/${slug}/photo`, { method: "POST", body: fd });
-    if (!res.ok) {
+    try {
+      const path = await uploadImage(`recipes/${slug}`, blob);
+      await setRecipePhoto(slug, path);
+    } catch (e) {
       setSaving(false);
-      setError(((await res.json().catch(() => ({}))) as { error?: string }).error ?? "Couldn't save the photo.");
+      setError((e as Error).message || "Couldn't save the photo.");
       return;
     }
-    router.push(`/recipes/${slug}`);
-    router.refresh();
+    router.push(`/recipe/?slug=${encodeURIComponent(slug)}`);
   }
 
   return (
@@ -270,7 +270,7 @@ export function PhotoStudio({ slug, title }: { slug: string; title: string }) {
           <button type="button" className="btn" onClick={save} disabled={!photo || saving || Boolean(status)}>
             {saving ? <><span className="spinner" /> Saving…</> : "Use this photo"}
           </button>
-          <button type="button" className="btn alt" onClick={() => router.push(`/recipes/${slug}`)}>Skip for now</button>
+          <button type="button" className="btn alt" onClick={() => router.push(`/recipe/?slug=${encodeURIComponent(slug)}`)}>Skip for now</button>
         </div>
       </section>
     </div>
@@ -292,4 +292,16 @@ function BackdropButton({ id, name, on, disabled, onClick }: { id: BackdropId; n
       <span>{name}</span>
     </button>
   );
+}
+
+/** Reads ?slug= and loads the recipe title for the studio. */
+export function PhotoStudioPage() {
+  const slug = useSearchParams().get("slug") ?? "";
+  const [title, setTitle] = useState<string | null | undefined>(undefined);
+  useEffect(() => {
+    getRecipe(slug).then((r) => setTitle(r?.title ?? null), () => setTitle(null));
+  }, [slug]);
+  if (title === undefined) return <p className="muted" style={{ padding: 40 }}>One moment…</p>;
+  if (title === null) return <p className="error" style={{ margin: 40 }}>That recipe isn&apos;t in the box.</p>;
+  return <PhotoStudio slug={slug} title={title} />;
 }

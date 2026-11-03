@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
-import Link from "next/link";
 import { Caveat, Figtree, Young_Serif } from "next/font/google";
+import { TopBar } from "@/components/TopBar";
 import "./globals.css";
 
 const display = Young_Serif({ weight: "400", subsets: ["latin"], variable: "--font-display" });
@@ -18,14 +18,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en-IE" className={`${display.variable} ${body.variable} ${hand.variable}`}>
       <body>
-        <header className="topbar">
-          <div className="wrap">
-            <Link href="/" className="brand">Oma&apos;s Kitchen</Link>
-            <nav className="nav">
-              <Link href="/add" className="btn small">+ Add a recipe</Link>
-            </nav>
-          </div>
-        </header>
+        <TopBar />
         <main>{children}</main>
       </body>
     </html>

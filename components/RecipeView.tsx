@@ -1,27 +1,34 @@
-import type { Metadata } from "next";
+"use client";
+
 import Link from "next/link";
-import { cookies } from "next/headers";
-import { notFound } from "next/navigation";
+import { useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
 import { Ingredients } from "@/components/Ingredients";
 import { RecipeImage } from "@/components/RecipeImage";
-import { AUTH_COOKIE, isValidToken } from "@/lib/auth";
-import { formatMinutes } from "@/lib/recipe";
-import { getRecipe, photoUrl } from "@/lib/store";
+import { getRecipe, photoUrl, useEditor } from "@/lib/data";
+import { formatMinutes, type Recipe } from "@/lib/recipe";
 
-export const dynamic = "force-dynamic";
+export function RecipeView() {
+  const slug = useSearchParams().get("slug") ?? "";
+  const { isEditor } = useEditor();
+  const [recipe, setRecipe] = useState<Recipe | null | undefined>(undefined);
 
-type Props = { params: Promise<{ slug: string }> };
+  useEffect(() => {
+    getRecipe(slug).then(setRecipe, () => setRecipe(null));
+  }, [slug]);
+  useEffect(() => {
+    if (recipe) document.title = `${recipe.title} · Oma's Kitchen`;
+  }, [recipe]);
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const recipe = await getRecipe((await params).slug);
-  return { title: recipe?.title ?? "Recipe" };
-}
-
-export default async function RecipePage({ params }: Props) {
-  const { slug } = await params;
-  const recipe = await getRecipe(slug);
-  if (!recipe) notFound();
-  const canEdit = await isValidToken((await cookies()).get(AUTH_COOKIE)?.value);
+  if (recipe === undefined) return <p className="wrap muted" style={{ padding: "60px 20px" }}>Finding the recipe…</p>;
+  if (recipe === null) {
+    return (
+      <div className="wrap empty">
+        <p className="hand" style={{ fontSize: 30 }}>That recipe isn&apos;t in the box.</p>
+        <Link href="/" className="btn">See all recipes</Link>
+      </div>
+    );
+  }
   const card = photoUrl(recipe.card_image_path);
 
   return (
@@ -37,8 +44,8 @@ export default async function RecipePage({ params }: Props) {
               <h1>{recipe.title}</h1>
               {recipe.subtitle && <p className="muted" style={{ margin: "6px 0 0" }}>{recipe.subtitle}</p>}
             </div>
-            {canEdit && (
-              <Link href={`/recipes/${recipe.slug}/photo`} className="btn alt small">
+            {isEditor && (
+              <Link href={`/recipe/photo/?slug=${encodeURIComponent(recipe.slug)}`} className="btn alt small">
                 {recipe.photo_path ? "Change photo" : "Add a photo"}
               </Link>
             )}

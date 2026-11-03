@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { createRecipe, shrinkImage, tidyRecipe, uploadImage } from "@/lib/data";
 import { CATEGORIES, type Ingredient, type RecipeDraft } from "@/lib/recipe";
 
 type Way = "type" | "card" | "speak";
@@ -73,15 +74,16 @@ export function AddRecipe() {
   async function tidy() {
     setBusy("tidy");
     setError(null);
-    const fd = new FormData();
-    fd.set("text", text);
-    cards.forEach((c) => fd.append("card", c));
     try {
-      const res = await fetch("/api/tidy", { method: "POST", body: fd });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Something went wrong.");
-      setDraft(data.draft);
-      setMeta({ original_text: data.original_text, card_image_path: data.card_image_path });
+      const small = await Promise.all(cards.map((c) => shrinkImage(c)));
+      const result = await tidyRecipe(text, small);
+      // Keep the first card photo as a keepsake on the recipe.
+      let card_image_path: string | null = meta.card_image_path;
+      if (small.length && !card_image_path) {
+        card_image_path = await uploadImage("cards", small[0]).catch(() => null);
+      }
+      setDraft(result);
+      setMeta({ original_text: text.trim() || null, card_image_path });
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -97,14 +99,8 @@ export function AddRecipe() {
     delete rest.questions;
     const cleaned = { ...rest, ingredients: rest.ingredients.filter((i) => i.name.trim()), steps: rest.steps.filter((s) => s.trim()) };
     try {
-      const res = await fetch("/api/recipes", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ draft: cleaned, ...meta }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Couldn't save.");
-      router.push(`/recipes/${data.slug}/photo?new=1`);
+      const slug = await createRecipe(cleaned, meta);
+      router.push(`/recipe/photo/?slug=${encodeURIComponent(slug)}`);
     } catch (e) {
       setError((e as Error).message);
       setBusy(null);
@@ -132,7 +128,7 @@ export function AddRecipe() {
 
         {way === "card" && (
           <label className={`drop${cards.length ? " has" : ""}`}>
-            <input type="file" accept="image/*" multiple hidden onChange={(e) => setCards(Array.from(e.target.files ?? []))} />
+            <input type="file" accept="image/*" multiple hidden onChange={(e) => { setCards(Array.from(e.target.files ?? [])); setMeta((m) => ({ ...m, card_image_path: null })); }} />
             {cards.length ? (
               <div className="thumbs">{previews.map((u, i) => (
               // eslint-disable-next-line @next/next/no-img-element
