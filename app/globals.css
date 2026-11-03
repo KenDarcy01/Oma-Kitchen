@@ -1,5 +1,8 @@
 /* Oma's Kitchen: warm plum and butter on paper, with Oma's notes in handwriting. */
 :root {
+  --font-display: "Young Serif";
+  --font-body: "Figtree Variable";
+  --font-hand: "Caveat";
   --plum: #7a2e5a;
   --plum-soft: #f7e6ef;
   --butter: #f3c853;

@@ -1,11 +1,12 @@
 import type { Metadata, Viewport } from "next";
-import { Caveat, Figtree, Young_Serif } from "next/font/google";
+import "@fontsource/young-serif/400.css";
+import "@fontsource-variable/figtree/index.css";
+import "@fontsource/caveat/500.css";
+import "@fontsource/caveat/700.css";
 import { TopBar } from "@/components/TopBar";
 import "./globals.css";
 
-const display = Young_Serif({ weight: "400", subsets: ["latin"], variable: "--font-display" });
-const body = Figtree({ subsets: ["latin"], variable: "--font-body" });
-const hand = Caveat({ subsets: ["latin"], weight: ["500", "700"], variable: "--font-hand" });
+// Fonts are bundled from npm (@fontsource) so builds never depend on reaching Google Fonts.
 
 export const metadata: Metadata = {
   title: { default: "Oma's Kitchen", template: "%s · Oma's Kitchen" },
@@ -16,7 +17,7 @@ export const viewport: Viewport = { themeColor: "#fffaf2", width: "device-width"
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en-IE" className={`${display.variable} ${body.variable} ${hand.variable}`}>
+    <html lang="en-IE">
       <body>
         <TopBar />
         <main>{children}</main>
