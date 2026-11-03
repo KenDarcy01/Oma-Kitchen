@@ -1,0 +1,20 @@
+name: Checks
+
+on:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://fpgrghfzlpfxoshlamjo.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_NPOaC0P4Yx5KfJ2f7NHKtQ_oK317wRY
