@@ -59,7 +59,9 @@ const CORS = {
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" } });
 
-let anthropic: Anthropic | null = null; // created on first use from the ANTHROPIC_API_KEY secret
+// Created on first use from the ANTHROPIC_API_KEY secret. An organization-wide key (not scoped to a
+// workspace) must name the workspace to bill, so ANTHROPIC_WORKSPACE_ID is sent when it is set.
+let anthropic: Anthropic | null = null;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
@@ -95,7 +97,8 @@ Deno.serve(async (req) => {
   if (!Deno.env.get("ANTHROPIC_API_KEY")) {
     return json({ error: "The recipe helper isn't set up yet (missing Claude API key)." }, 500);
   }
-  anthropic ??= new Anthropic();
+  const workspaceId = Deno.env.get("ANTHROPIC_WORKSPACE_ID")?.trim();
+  anthropic ??= new Anthropic(workspaceId ? { defaultHeaders: { "anthropic-workspace-id": workspaceId } } : {});
 
   try {
     const message = await anthropic.beta.messages.parse({
@@ -114,7 +117,10 @@ Deno.serve(async (req) => {
   } catch (err) {
     console.error(err);
     if (err instanceof Anthropic.RateLimitError) return json({ error: "Lots of cooking going on. Try again in a minute." }, 429);
-    if (err instanceof Anthropic.AuthenticationError) return json({ error: "The recipe helper isn't set up yet (missing Claude API key)." }, 500);
+    if (err instanceof Anthropic.AuthenticationError) return json({ error: "The recipe helper isn't set up yet (the Claude API key was rejected)." }, 500);
+    if (err instanceof Anthropic.BadRequestError && /workspace/i.test(err.message)) {
+      return json({ error: "The recipe helper isn't set up yet: the Claude API key needs a workspace." }, 500);
+    }
     return json({ error: "The recipe helper had a hiccup. Please try again." }, 502);
   }
 });
