@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { createRecipe, shrinkImage, tidyRecipe, uploadImage } from "@/lib/data";
+import { createRecipe, cropDishPhoto, shrinkImage, tidyRecipe, uploadImage } from "@/lib/data";
 import { CATEGORIES, type Ingredient, type RecipeDraft } from "@/lib/recipe";
 
 type Way = "type" | "card" | "speak";
@@ -37,6 +37,11 @@ export function AddRecipe() {
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<RecipeDraft | null>(null);
   const [meta, setMeta] = useState<{ original_text: string | null; card_image_path: string | null }>({ original_text: null, card_image_path: null });
+
+  // A photo of the dish found on the card. It becomes the recipe's photo unless Oma says no.
+  const [dish, setDish] = useState<{ blob: Blob; url: string } | null>(null);
+  const [useDish, setUseDish] = useState(true);
+  useEffect(() => () => { if (dish) URL.revokeObjectURL(dish.url); }, [dish]);
 
   useEffect(() => setCanSpeak(Boolean(getSpeech())), []);
   useEffect(() => {
@@ -76,7 +81,10 @@ export function AddRecipe() {
     setError(null);
     try {
       const small = await Promise.all(cards.map((c) => shrinkImage(c)));
-      const result = await tidyRecipe(text, small);
+      const { draft: result, dishPhoto } = await tidyRecipe(text, small);
+      const found = dishPhoto && small[dishPhoto.card] ? await cropDishPhoto(small[dishPhoto.card], dishPhoto).catch(() => null) : null;
+      setDish(found ? { blob: found, url: URL.createObjectURL(found) } : null);
+      setUseDish(true);
       // Keep the first card photo as a keepsake on the recipe.
       let card_image_path: string | null = meta.card_image_path;
       if (small.length && !card_image_path) {
@@ -99,8 +107,10 @@ export function AddRecipe() {
     delete rest.questions;
     const cleaned = { ...rest, ingredients: rest.ingredients.filter((i) => i.name.trim()), steps: rest.steps.filter((s) => s.trim()) };
     try {
-      const slug = await createRecipe(cleaned, meta);
-      router.push(`/recipe/photo/?slug=${encodeURIComponent(slug)}`);
+      const photo_path = dish && useDish ? await uploadImage("photos", dish.blob) : null;
+      const slug = await createRecipe(cleaned, { ...meta, photo_path });
+      // With the card's own photo in place, go straight to the recipe; otherwise on to the photo studio.
+      router.push(`${photo_path ? "/recipe/" : "/recipe/photo/"}?slug=${encodeURIComponent(slug)}`);
     } catch (e) {
       setError((e as Error).message);
       setBusy(null);
@@ -128,7 +138,7 @@ export function AddRecipe() {
 
         {way === "card" && (
           <label className={`drop${cards.length ? " has" : ""}`}>
-            <input type="file" accept="image/*" multiple hidden onChange={(e) => { setCards(Array.from(e.target.files ?? [])); setMeta((m) => ({ ...m, card_image_path: null })); }} />
+            <input type="file" accept="image/*" multiple hidden onChange={(e) => { setCards(Array.from(e.target.files ?? [])); setDish(null); setMeta((m) => ({ ...m, card_image_path: null })); }} />
             {cards.length ? (
               <div className="thumbs">{previews.map((u, i) => (
               // eslint-disable-next-line @next/next/no-img-element
@@ -188,6 +198,22 @@ export function AddRecipe() {
               <div className="questions">
                 <b style={{ fontSize: 14 }}>A couple of questions</b>
                 {draft.questions.map((q, i) => <span key={i} style={{ fontSize: 15 }}>• {q}</span>)}
+              </div>
+            )}
+
+            {dish && (
+              <div className="dish-found">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={dish.url} alt="Photo of the dish, taken from the card" style={useDish ? undefined : { opacity: 0.4 }} />
+                <div style={{ display: "grid", gap: 6, alignContent: "center" }}>
+                  <b style={{ fontSize: 15 }}>{useDish ? "Using the photo from the card" : "Not using the card's photo"}</b>
+                  <span className="small">
+                    {useDish ? "It will be the recipe's photo. You can change it later." : "You can take your own photo after saving."}
+                  </span>
+                  <button type="button" className="btn alt small" style={{ justifySelf: "start" }} onClick={() => setUseDish((u) => !u)}>
+                    {useDish ? "Don't use it" : "Use it after all"}
+                  </button>
+                </div>
               </div>
             )}
 
@@ -260,7 +286,7 @@ export function AddRecipe() {
             </div>
 
             <button type="button" className="btn" onClick={save} disabled={busy !== null || !draft.title.trim()}>
-              {busy === "save" ? <><span className="spinner" /> Saving…</> : "Save and add a photo"}
+              {busy === "save" ? <><span className="spinner" /> Saving…</> : dish && useDish ? "Save recipe" : "Save and add a photo"}
             </button>
           </>
         )}

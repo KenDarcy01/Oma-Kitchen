@@ -99,7 +99,7 @@ async function uniqueSlug(title: string): Promise<string> {
 
 export async function createRecipe(
   draft: Omit<RecipeDraft, "questions">,
-  extra: { original_text: string | null; card_image_path: string | null },
+  extra: { original_text: string | null; card_image_path: string | null; photo_path?: string | null },
 ): Promise<string> {
   const slug = await uniqueSlug(draft.title);
   const { error } = await supabase().from(TABLE).insert({ ...draft, ...extra, slug });
@@ -131,6 +131,27 @@ export async function shrinkImage(file: Blob, max = 1600, quality = 0.85): Promi
   return new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error("Couldn't read that photo."))), "image/jpeg", quality));
 }
 
+/** Where Claude found a photo of the dish on a card image: edges on a 0-1000 scale of that image. */
+export type DishPhoto = { card: number; left: number; top: number; right: number; bottom: number };
+
+/** Cut the dish photo out of a card image. Returns null when the box is missing or too small to be a real photo. */
+export async function cropDishPhoto(card: Blob, b: DishPhoto): Promise<Blob | null> {
+  const bmp = await createImageBitmap(card);
+  const clamp = (v: number) => Math.min(1000, Math.max(0, v)) / 1000;
+  const x0 = clamp(Math.min(b.left, b.right)), x1 = clamp(Math.max(b.left, b.right));
+  const y0 = clamp(Math.min(b.top, b.bottom)), y1 = clamp(Math.max(b.top, b.bottom));
+  if (x1 - x0 < 0.1 || y1 - y0 < 0.1) return null;
+  // Trim a sliver off each edge so a loose box doesn't pull in the photo's border or the text beside it.
+  const inset = 0.01;
+  const sx = Math.round((x0 + inset) * bmp.width), sy = Math.round((y0 + inset) * bmp.height);
+  const sw = Math.round((x1 - x0 - 2 * inset) * bmp.width), sh = Math.round((y1 - y0 - 2 * inset) * bmp.height);
+  const c = document.createElement("canvas");
+  c.width = sw;
+  c.height = sh;
+  c.getContext("2d")!.drawImage(bmp, sx, sy, sw, sh, 0, 0, sw, sh);
+  return new Promise((res) => c.toBlob((out) => res(out), "image/jpeg", 0.9));
+}
+
 async function toBase64(blob: Blob): Promise<string> {
   const buf = new Uint8Array(await blob.arrayBuffer());
   let bin = "";
@@ -138,8 +159,11 @@ async function toBase64(blob: Blob): Promise<string> {
   return btoa(bin);
 }
 
-/** Ask Claude (via the oma-tidy Edge Function) to turn text and/or card photos into a recipe draft. */
-export async function tidyRecipe(text: string, cards: Blob[]): Promise<RecipeDraft> {
+/**
+ * Ask Claude (via the oma-tidy Edge Function) to turn text and/or card photos into a recipe draft.
+ * When a card has a photo of the finished dish on it, dishPhoto says where.
+ */
+export async function tidyRecipe(text: string, cards: Blob[]): Promise<{ draft: RecipeDraft; dishPhoto: DishPhoto | null }> {
   const images = await Promise.all(cards.map(async (c) => ({ media_type: "image/jpeg", data: await toBase64(c) })));
   const { data, error } = await supabase().functions.invoke("oma-tidy", { body: { text, images } });
   if (error) {
@@ -148,5 +172,6 @@ export async function tidyRecipe(text: string, cards: Blob[]): Promise<RecipeDra
     const body = ctx && typeof ctx.json === "function" ? await ctx.json().catch(() => null) : null;
     throw new Error(body?.error ?? "The recipe helper had a hiccup. Please try again.");
   }
-  return (data as { draft: RecipeDraft }).draft;
+  const out = data as { draft: RecipeDraft; dish_photo?: DishPhoto | null };
+  return { draft: out.draft, dishPhoto: out.dish_photo ?? null };
 }

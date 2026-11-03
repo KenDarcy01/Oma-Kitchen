@@ -32,6 +32,20 @@ const RecipeDraft = z.object({
   tip: z.string().nullable().describe("Oma's personal tip or margin note, kept in her own words"),
   questions: z.array(z.string()).describe("Gentle questions for Oma about anything missing or unclear, e.g. 'How long in the oven?'"),
 });
+// Where a printed or stuck-on photo of the finished dish sits on one of the card images, so the app can cut it out.
+// Edges are on a 0-1000 scale of that image's width (left, right) and height (top, bottom).
+const DishPhoto = z.object({
+  card: z.number().int().describe("Which image the photo is in, counting from 0 in the order given"),
+  left: z.number().int(),
+  top: z.number().int(),
+  right: z.number().int(),
+  bottom: z.number().int(),
+});
+const TidyOutput = RecipeDraft.extend({
+  dish_photo: DishPhoto.nullable().describe(
+    "The photo of the finished dish on the card or page, if there is one: its edges on a 0-1000 scale of that image. Null if there's no dish photo (handwriting, drawings and the card itself don't count).",
+  ),
+});
 
 const SYSTEM = `You help Oma, an Irish grandmother, put her family recipes into a cookbook app for her children and grandchildren.
 
@@ -42,7 +56,8 @@ You receive what she typed, what she said aloud (a voice transcript), and/or pho
 - Older Irish cards use ounces, pints, cups, "a knob of butter", and gas marks. Give metric amounts (g, ml) as numbers, and keep what she wrote in "original". Convert gas marks to °C and keep the gas mark too.
 - Vague amounts ("a good handful", "a little") get your best metric guess with needs_check true. Never invent ingredients or steps she didn't give.
 - If the oven temperature, time, or yield is missing, leave it null and ask about it in questions. Ask at most three short, warm questions.
-- Use Irish and British names (plain flour, caster sugar, bread soda, buttermilk).`;
+- Use Irish and British names (plain flour, caster sugar, bread soda, buttermilk).
+- If an image includes a photo of the finished dish (say a magazine cutting or a printed recipe card), give its edges in dish_photo, tight to the photo itself, leaving out text, borders and the table around it. Otherwise dish_photo is null.`;
 
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const;
 type ImageType = (typeof IMAGE_TYPES)[number];
@@ -105,7 +120,7 @@ Deno.serve(async (req) => {
       model: "claude-opus-5-5",
       max_tokens: 16000,
       system: SYSTEM,
-      output_config: { effort: "medium", format: betaZodOutputFormat(RecipeDraft) },
+      output_config: { effort: "medium", format: betaZodOutputFormat(TidyOutput) },
       betas: ["server-side-fallback-2026-07-01"],
       fallbacks: "default",
       messages: [{ role: "user", content }],
@@ -113,7 +128,8 @@ Deno.serve(async (req) => {
     if (message.stop_reason === "refusal" || !message.parsed_output) {
       return json({ error: "I couldn't make sense of that one. Could you try typing it out, or a clearer photo?" }, 422);
     }
-    return json({ draft: message.parsed_output });
+    const { dish_photo, ...draft } = message.parsed_output;
+    return json({ draft, dish_photo: images.length && dish_photo && dish_photo.card < images.length ? dish_photo : null });
   } catch (err) {
     console.error(err);
     if (err instanceof Anthropic.RateLimitError) return json({ error: "Lots of cooking going on. Try again in a minute." }, 429);
