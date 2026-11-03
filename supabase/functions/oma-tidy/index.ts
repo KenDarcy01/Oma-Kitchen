@@ -134,6 +134,9 @@ Deno.serve(async (req) => {
     console.error(err);
     if (err instanceof Anthropic.RateLimitError) return json({ error: "Lots of cooking going on. Try again in a minute." }, 429);
     if (err instanceof Anthropic.AuthenticationError) return json({ error: "The recipe helper isn't set up yet (the Claude API key was rejected)." }, 500);
+    if (err instanceof Anthropic.BadRequestError && /usage limit/i.test(err.message)) {
+      return json({ error: "The recipe helper has used up its Claude allowance for now. Ask Ken to raise the limit in the Anthropic Console." }, 503);
+    }
     if (err instanceof Anthropic.BadRequestError && /workspace/i.test(err.message)) {
       return json({ error: "The recipe helper isn't set up yet: the Claude API key needs a workspace." }, 500);
     }
