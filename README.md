@@ -18,7 +18,7 @@ The site is static and hosted on **GitHub Pages**, so everything runs in the bro
 
 ## One-time setup
 
-1. **Turn on Pages**: repo Settings → Pages → Source: **GitHub Actions**. Every push to `main` then publishes to `https://kendarcy01.github.io/Oma-Kitchen/`.
+1. **Pages**: every push to `main` builds the site and publishes it to the `gh-pages` branch, served at `https://kendarcy01.github.io/Oma-Kitchen/`. If the site doesn't appear after the first publish, set repo Settings → Pages → Source to *Deploy from a branch*, `gh-pages`, `/ (root)`.
 2. **Claude key**: Supabase dashboard → Edge Functions → Secrets → add `ANTHROPIC_API_KEY`.
 3. **Sign-ins**: Supabase dashboard → Authentication → Users → *Add user* (email + password, auto-confirm) for Oma and anyone else who adds recipes. Then put their emails on the list in the SQL editor:
    ```sql
